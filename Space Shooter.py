@@ -2,8 +2,8 @@ import arcade
 import math
 import random
 
-SCREEN_WIDTH = 900
-SCREEN_HEIGHT = 600
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
 SCREEN_TITLE = "Space Shooter"
 
 PLAYER_SCALE = 0.3
@@ -168,7 +168,153 @@ class BossBullet:
 
 class Boss:
     def __init__(self):
-        pass
+        self.x = SCREEN_WIDTH //2 + random.uniform(-200, 200)
+        self.y = SCREEN_HEIGHT + 100
+
+        self.speed = 2
+        self.angle = 0
+        self.radius = 150 * ENEMY_SCALE * 3
+        self.max_health = 100
+        self.health = self.max_health
+
+        self.normal_shoot_cooldown = 0
+        self.big_shoot_cooldown = 0
+        self.attack_cooldown = 0
+        self.damage_flash_timer = 0
+        self.flashing = False
+
+        self.entering = True
+        self.target_y = SCREEN_HEIGHT - 150
+
+        self.color = arcade.color.ORANGE
+    
+    def take_damage(self):
+        self.health -= 1
+        self.damage_flash_timer = 0.3
+        self.flashing = True
+        return self.health <= 0
+    
+    def update(self, player_x, player_y, delta_time):
+        if self.entering:
+            self.y -= self.speed
+
+            if self.y <= self.target_y:
+                self.y = self.target_y
+                self.entering = False
+
+        else:
+            dx = player_x - self.x
+            dy = player_y - self.y
+            self.angle = math.degrees(math.atan2(dy, dx))
+
+            self.x += math.cos(math.radians(self.angle)) * self.speed
+            self.y += math.sin(math.radians(self.angle)) * self.speed
+
+        self.normal_shoot_cooldown -= delta_time
+        self.big_shoot_cooldown -= delta_time
+        self.attack_cooldown -= delta_time
+
+        if self.flashing:
+            self.damage_flash_timer -= delta_time
+            if self.damage_flash_timer <= 0:
+                self.flashing = False
+        
+    def choose_attack(self):
+        attacks = ["normal", "big"]
+        weights = [9, 1]
+
+        return random.choices(attacks, weights=weights)[0]
+
+    def shoot_normal(self):
+        if self.normal_shoot_cooldown <= 0:
+            bullet_x = self.x + \
+                math.cos(math.radians(self.angle)) * self.radius
+            bullet_y = self.y + \
+                math.sin(math.radians(self.angle)) * self.radius
+
+            self.normal_shoot_cooldown = 1.5
+            return BossBullet(bullet_x, bullet_y, self.angle, is_big=False)
+        return None
+    
+    def shoot_big(self):
+        if self.big_shoot_cooldown <= 0:
+            bullet_x = self.x + \
+                math.cos(math.radians(self.angle)) * self.radius
+            bullet_y = self.y + \
+                math.sin(math.radians(self.angle)) * self.radius
+
+            self.big_shoot_cooldown = 8.0
+            return BossBullet(bullet_x, bullet_y, self.angle, is_big=True)
+        return None
+    
+    def attack(self):
+        if self.attack_cooldown > 0:
+            return []
+        
+        self.attack_cooldown = 2.5
+        attack_type = self.choose_attack()
+
+        if attack_type == "normal":
+            return [self.shoot_normal()]
+        elif attack_type == "big":
+            return [self.shoot_big()]
+
+        return []
+
+    
+    def draw(self):
+        draw_color = arcade.color.WHITE if self.flashing else self.color
+
+        points = [
+            (self.x + math.cos(math.radians(self.angle)) * self.radius * 1.5,
+             self.y + math.sin(math.radians(self.angle)) * self.radius * 1.5),
+            (self.x + math.cos(math.radians(self.angle + 90)) * self.radius,
+             self.y + math.sin(math.radians(self.angle + 90)) * self.radius),
+            (self.x + math.cos(math.radians(self.angle + 180)) * self.radius * 1.5,
+             self.y + math.sin(math.radians(self.angle + 180)) * self.radius * 1.5),
+            (self.x + math.cos(math.radians(self.angle + 270)) * self.radius,
+             self.y + math.sin(math.radians(self.angle + 270)) * self.radius),
+        ]
+        arcade.draw_polygon_filled(points, draw_color)
+
+    def draw_health_bar(self):
+        bar_width = 200
+        bar_height = 15
+        health_percentage = self.health / self.max_health
+        health_width = health_percentage * bar_width
+
+        bar_x = self.x - bar_width / 2
+        bar_y = self.y + self.radius + 10
+
+        arcade.draw_lbwh_rectangle_filled(
+            bar_x, bar_y, bar_width, bar_height, arcade.color.RED
+        )
+
+        if health_percentage > 0.7:
+            health_color = arcade.color.GREEN
+        elif health_percentage > 0.4:
+            health_color = arcade.color.YELLOW
+        else:
+            health_color = arcade.color.RED
+        
+        arcade.draw_lbwh_rectangle_filled(
+            bar_x, bar_y, health_width, bar_height, health_color
+        )
+        arcade.draw_lbwh_rectangle_outline(
+            bar_x, bar_y, bar_width, bar_height, arcade.color.WHITE
+        )
+
+        arcade.draw_text(
+            f"BOSS HP: {self.health}/{self.max_health}",
+            bar_x-80,
+            bar_y + 25,
+            arcade.color.WHITE,
+            12
+        )
+
+    def is_off_screen(self):
+        return (self.x < -100 or self.x > SCREEN_WIDTH+100 or self.y < -100 or self.y > SCREEN_HEIGHT+100)
+
 
 
 class Bullet:
@@ -216,6 +362,10 @@ class GameWindow(arcade.Window):
 
         self.enemy_bullets = []
 
+        self.boss = None
+        self.next_boss_score = 500
+        self.boss_bullets = []
+
         self.keys_pressed = set()
     
     def on_draw(self):
@@ -240,7 +390,13 @@ class GameWindow(arcade.Window):
         
         for bullet in self.enemy_bullets:
             bullet.draw()
+        
+        for bullet in self.boss_bullets:
+            bullet.draw()
 
+        if self.boss:
+            self.boss.draw()
+            self.boss.draw_health_bar()
         
         if self.game_over:
             arcade.draw_text(
@@ -299,7 +455,7 @@ class GameWindow(arcade.Window):
         if arcade.key.SPACE in self.keys_pressed:
             self.shoot()
 
-        if self.enemy_spawn_timer <= 0:
+        if self.enemy_spawn_timer <= 0 and self.boss is None:
             self.enemies.append(Enemy())
             self.enemy_spawn_timer = ENEMY_SPAWN_RATE
 
@@ -314,6 +470,21 @@ class GameWindow(arcade.Window):
         
         self.player_x = max(self.player_radius, min(SCREEN_WIDTH - self.player_radius, self.player_x))
         self.player_y = max(self.player_radius, min(SCREEN_HEIGHT - self.player_radius, self.player_y))
+
+        if self.boss is None and self.score >= self.next_boss_score:
+            self.boss = Boss()
+            self.next_boss_score += 500
+
+
+        if self.boss:
+            self.boss.update(self.player_x, self.player_y, delta_time)
+
+            if not self.boss.entering:
+                bullets = self.boss.attack()
+
+                for bullet in bullets:
+                    if bullet:
+                        self.boss_bullets.append(bullet)
 
         for bullet in self.bullets[:]:
             bullet.update()
@@ -391,6 +562,39 @@ class GameWindow(arcade.Window):
             elif enemy.is_off_screen():
                 self.enemies.remove(enemy)
         
+        # Boss Bullet vs Player
+        for bullet in self.boss_bullets[:]:
+            bullet.update()
+
+            distance = math.sqrt((bullet.x - self.player_x) ** 2 + (bullet.y - self.player_y) ** 2)
+
+            if distance < bullet.radius + self.player_radius:
+                self.health -= bullet.damage
+                self.boss_bullets.remove(bullet)
+
+                if self.health <= 0:
+                    self.game_over = True
+
+            elif bullet.is_off_screen():
+                self.boss_bullets.remove(bullet)
+        
+        # Player bullet vs Boss
+        boss = self.boss
+
+        if boss:
+            for bullet in self.bullets[:]:
+                distance = math.sqrt((bullet.x - self.boss.x) ** 2 + (bullet.y - self.boss.y) ** 2)
+
+                if distance < bullet.radius + self.boss.radius:
+                    self.boss.take_damage()
+                    self.bullets.remove(bullet)
+
+                    if self.boss.health <= 0:
+                        self.score += 200
+                        self.boss = None
+                        break
+
+        
     def shoot(self):
         if self.shoot_cooldown <= 0:
             bullet_x = self.player_x + \
@@ -435,8 +639,11 @@ class GameWindow(arcade.Window):
         self.enemy_bullets.clear()
         self.score = 0
         self.health = 100
+        self.boss = None
+        self.boss_bullets.clear()
+        self.next_boss_score = 500
+        self.boss = None
         self.game_over = False
-
     
 
 def main():
