@@ -2,27 +2,55 @@ import arcade
 import math
 import random
 
-SCREEN_WIDTH = 1200
-SCREEN_HEIGHT = 800
+SCREEN_WIDTH = 1300
+SCREEN_HEIGHT = 700
 SCREEN_TITLE = "Space Shooter"
 
-PLAYER_SCALE = 0.3
+PLAYER_SCALE = 0.2
 PLAYER_SPEED = 5
 PLAYER_TURN_SPEED = 3
 PLAYER_SHOOT_COOLDOWN = 0.1
 
 BULLET_SPEED = 10
-BULLET_SCALE = 0.8
+BULLET_SCALE = 0.6
 
 ENEMY_SPAWN_RATE = 1
 ENEMY_MIN_SPEED = 1
 ENEMY_MAX_SPEED = 3
-ENEMY_SCALE = 0.3
+ENEMY_SCALE = 0.2
 
 ENEMY_TYPES = ["normal", "shooter"]
 ENEMY_SHOOT_COOLDOWN = 2.0
 ENEMY_BULLET_SPEED = 5
 ENEMY_BULLET_COLOR = arcade.color.RED
+
+
+class PowerUp:
+    def __init__(self, x, y, power_type):
+        self.x = x
+        self.y = y
+        self.power_type = power_type
+        self.radius = 15
+        self.speed_y = -1
+
+        if power_type == "rapid_fire":
+            self.color = arcade.color.CYAN
+        elif power_type == "shield":
+            self.color = arcade.color.BLUE
+        else:
+            self.color = arcade.color.GREEN
+        
+    def update(self):
+        self.y += self.speed_y
+    
+    def draw(self):
+        arcade.draw_circle_filled(self.x, self.y, self.radius, self.color)
+        if self.power_type == "rapid_fire":
+            arcade.draw_text("⚡", self.x - 4, self.y - 4, arcade.color.WHITE, 10)
+        if self.power_type == "shield":
+            arcade.draw_text("🛡️", self.x - 4, self.y - 4, arcade.color.WHITE, 10)
+        else:
+            arcade.draw_text("❤️", self.x - 4, self.y - 4, arcade.color.WHITE, 10)
 
 
 class EnemyBullet:
@@ -295,7 +323,7 @@ class Boss:
         elif health_percentage > 0.4:
             health_color = arcade.color.YELLOW
         else:
-            health_color = arcade.color.RED
+            health_color = arcade.color.ORANGE
         
         arcade.draw_lbwh_rectangle_filled(
             bar_x, bar_y, health_width, bar_height, health_color
@@ -341,7 +369,7 @@ class Bullet:
 
 class GameWindow(arcade.Window):
     def __init__(self):
-        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True)
         arcade.set_background_color(arcade.color.BLACK)
 
         self.player_x = SCREEN_WIDTH//2
@@ -366,11 +394,16 @@ class GameWindow(arcade.Window):
         self.next_boss_score = 500
         self.boss_bullets = []
 
+        self.powerups = []
+        self.rapid_fire_timer = 0.0
+        self.shield_timer = 0.0
+
         self.keys_pressed = set()
     
     def on_draw(self):
         self.clear()
 
+        # Drawing Player
         arcade.draw_triangle_filled(
             self.player_x + math.cos(math.radians(self.player_angle)) * self.player_radius * 1.5,
             self.player_y + math.sin(math.radians(self.player_angle)) * self.player_radius * 1.5,
@@ -393,6 +426,9 @@ class GameWindow(arcade.Window):
         
         for bullet in self.boss_bullets:
             bullet.draw()
+
+        for powerup in self.powerups:
+            powerup.draw()
 
         if self.boss:
             self.boss.draw()
@@ -490,6 +526,11 @@ class GameWindow(arcade.Window):
             bullet.update()
             if bullet.is_off_screen():
                 self.bullets.remove(bullet)
+        
+        for powerup in self.powerups[:]:
+            powerup.update()
+            if powerup.y < 0:
+                self.powerups.remove(powerup)
 
         # Enemy collision with Bulllet
         for bullet in self.bullets[:]:
@@ -500,6 +541,11 @@ class GameWindow(arcade.Window):
                     if enemy.health <= 0:
                         self.enemies.remove(enemy)
                         self.score += 20 if enemy.enemy_type == "shooter" else 10 
+                        if random.random() < 0.4:   # for a 40% drop chance
+                            power_type = random.choices(["rapid_fire", "shield", "health"], weights=[5, 3, 2])[0]
+                            self.powerups.append(
+                                PowerUp(enemy.x, enemy.y, power_type)
+                            )
                     if bullet in self.bullets:
                         self.bullets.remove(bullet)
                     break
@@ -593,6 +639,24 @@ class GameWindow(arcade.Window):
                         self.score += 200
                         self.boss = None
                         break
+        
+        # Power-ups vs Player Collision
+        for powerup in self.powerups:
+            distance = math.sqrt((self.player_x - powerup.x) ** 2 + (self.player_y - powerup.y) ** 2)
+
+            if distance < self.player_radius + powerup.radius:
+                if powerup.power_type == "rapid_fire":
+                    self.rapid_fire_timer = 10.0
+                elif powerup.power_type == "shield":
+                    self.shield_timer = 15.0
+                else:
+                    self.health += 50
+            self.powerups.remove(powerup)
+        
+        if self.rapid_fire_timer > 0:
+            self.rapid_fire_timer -= delta_time
+        if self.shield_timer > 0:
+            self.shield_timer -= delta_time
 
         
     def shoot(self):
@@ -602,7 +666,15 @@ class GameWindow(arcade.Window):
             bullet_y = self.player_y + \
                 math.sin(math.radians(self.player_angle)) * self.player_radius
             self.bullets.append(Bullet(bullet_x, bullet_y, self.player_angle))
+            # self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN
+        
+        # self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN /3 if self.rapid_fire_timer > 0 else PLAYER_SHOOT_COOLDOWN
+        if self.rapid_fire_timer > 0:
+            self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN / 3
+        else:
             self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN
+        
+        print("cooldown set to:", PLAYER_SHOOT_COOLDOWN)
 
     def on_key_press(self, key, modifiers):
         self.keys_pressed.add(key)
@@ -643,6 +715,7 @@ class GameWindow(arcade.Window):
         self.boss_bullets.clear()
         self.next_boss_score = 500
         self.boss = None
+        self.powerups.clear()
         self.game_over = False
     
 
