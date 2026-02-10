@@ -658,6 +658,7 @@ class GameWindow(arcade.Window):
         if self.shield_timer > 0:
             self.shield_timer -= delta_time
 
+    # FIX: implement the powerup class properly and fix the bugs
         
     def shoot(self):
         if self.shoot_cooldown <= 0:
