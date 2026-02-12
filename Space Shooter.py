@@ -53,6 +53,7 @@ class PowerUp:
             arcade.draw_text("❤️", self.x - 4, self.y - 4, arcade.color.WHITE, 10)
 
 
+
 class EnemyBullet:
     def __init__(self, x, y, angle):
         self.x = x
