@@ -5,7 +5,7 @@ import random
 SCREEN_WIDTH = 1300
 SCREEN_HEIGHT = 700
 SCREEN_TITLE = "Space Shooter"
- 
+
 PLAYER_SCALE = 0.2
 PLAYER_SPEED = 5
 PLAYER_TURN_SPEED = 3
@@ -51,7 +51,6 @@ class PowerUp:
             arcade.draw_text("🛡️", self.x - 4, self.y - 4, arcade.color.WHITE, 10)
         else:
             arcade.draw_text("❤️", self.x - 4, self.y - 4, arcade.color.WHITE, 10)
-
 
 
 class EnemyBullet:
@@ -250,7 +249,7 @@ class Boss:
         
     def choose_attack(self):
         attacks = ["normal", "big"]
-        weights = [9, 1]
+        weights = [7, 3]
 
         return random.choices(attacks, weights=weights)[0]
 
@@ -478,16 +477,46 @@ class GameWindow(arcade.Window):
             16
         )
 
+        if self.shield_timer > 0:
+            arcade.draw_circle_outline(
+                self.player_x,
+                self.player_y,
+                self.player_radius + 10,
+                arcade.color.CYAN,
+                3
+            )
+        
+        y_offset = SCREEN_HEIGHT - 120
+
+        if self.rapid_fire_timer > 0:
+            arcade.draw_text(
+                f"Rapid Fire: {self.rapid_fire_timer:.1f}s",
+                10,
+                y_offset,
+                arcade.color.CYAN,
+                14
+            )
+            y_offset -= 25
+
+        if self.shield_timer > 0:
+            arcade.draw_text(
+                f"Shield: {self.shield_timer:.1f}s",
+                10,
+                y_offset,
+                arcade.color.BLUE,
+                14
+            )
+
 
     
     def on_update(self, delta_time):
         if self.game_over:
             return
 
-
-        self.shoot_cooldown -= delta_time
-
         self.enemy_spawn_timer -= delta_time
+
+        if self.shoot_cooldown > 0:
+            self.shoot_cooldown -= delta_time
 
         if arcade.key.SPACE in self.keys_pressed:
             self.shoot()
@@ -536,13 +565,14 @@ class GameWindow(arcade.Window):
         # Enemy collision with Bulllet
         for bullet in self.bullets[:]:
             for enemy in self.enemies[:]:
-                distance = math.sqrt((bullet.x - enemy.x)**2 + (bullet.y - enemy.y)**2)
-                if distance < bullet.radius + enemy.radius:
-                    enemy.take_damage()
+                dx = bullet.x - enemy.x
+                dy = bullet.y - enemy.y
+                if dx*dx + dy*dy < (bullet.radius + enemy.radius)**2:
+                    enemy.take_damage() # Fix this optimizatin in every collision check
                     if enemy.health <= 0:
                         self.enemies.remove(enemy)
                         self.score += 20 if enemy.enemy_type == "shooter" else 10 
-                        if random.random() < 0.4:   # for a 40% drop chance
+                        if random.random() < 0.2:   # for a 20% drop chance
                             power_type = random.choices(["rapid_fire", "shield", "health"], weights=[5, 3, 2])[0]
                             self.powerups.append(
                                 PowerUp(enemy.x, enemy.y, power_type)
@@ -573,7 +603,8 @@ class GameWindow(arcade.Window):
 
             distance = math.sqrt((bullet.x - self.player_x) ** 2 +(bullet.y - self.player_y) ** 2)
             if distance < bullet.radius + self.player_radius:
-                self.health -= 5
+                if self.shield_timer <= 0:
+                    self.health -= 5
                 self.enemy_bullets.remove(bullet)
 
                 if self.health <= 0:
@@ -597,7 +628,8 @@ class GameWindow(arcade.Window):
 
             distance = math.sqrt((enemy.x - self.player_x)**2 + (enemy.y - self.player_y)**2)
             if distance < enemy.radius + self.player_radius:
-                self.health -= 10
+                if self.shield_timer <= 0:
+                    self.health -= 10
                 self.enemies.remove(enemy)
                 if self.health <= 0:
                     self.game_over = True
@@ -642,33 +674,40 @@ class GameWindow(arcade.Window):
                         break
         
         # Power-ups vs Player Collision
-        for powerup in self.powerups:
-            distance = math.sqrt((self.player_x - powerup.x) ** 2 + (self.player_y - powerup.y) ** 2)
+        for powerup in self.powerups[:]:
+            dx = self.player_x - powerup.x
+            dy = self.player_y - powerup.y
 
-            if distance < self.player_radius + powerup.radius:
+            if dx*dx + dy*dy < (self.player_radius + powerup.radius) ** 2:
+
                 if powerup.power_type == "rapid_fire":
                     self.rapid_fire_timer = 10.0
+
                 elif powerup.power_type == "shield":
                     self.shield_timer = 15.0
-                else:
-                    self.health += 50
-            self.powerups.remove(powerup)
+
+                elif powerup.power_type == "health":
+                    self.health = self.health + 50
+
+                self.powerups.remove(powerup)
         
         if self.rapid_fire_timer > 0:
             self.rapid_fire_timer -= delta_time
         if self.shield_timer > 0:
             self.shield_timer -= delta_time
 
-    # FIX: implement the powerup class properly and fix the bugs
+    # FIX: implement the powerup class properly
         
     def shoot(self):
-        if self.shoot_cooldown <= 0:
-            bullet_x = self.player_x + \
-                math.cos(math.radians(self.player_angle)) * self.player_radius
-            bullet_y = self.player_y + \
-                math.sin(math.radians(self.player_angle)) * self.player_radius
-            self.bullets.append(Bullet(bullet_x, bullet_y, self.player_angle))
-            # self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN
+        if self.shoot_cooldown > 0:
+            return
+
+        bullet_x = self.player_x + \
+            math.cos(math.radians(self.player_angle)) * self.player_radius
+        bullet_y = self.player_y + \
+            math.sin(math.radians(self.player_angle)) * self.player_radius
+        self.bullets.append(Bullet(bullet_x, bullet_y, self.player_angle))
+        # self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN
         
         # self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN /3 if self.rapid_fire_timer > 0 else PLAYER_SHOOT_COOLDOWN
         if self.rapid_fire_timer > 0:
@@ -676,7 +715,7 @@ class GameWindow(arcade.Window):
         else:
             self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN
         
-        print("cooldown set to:", PLAYER_SHOOT_COOLDOWN)
+        # print("cooldown set to:", PLAYER_SHOOT_COOLDOWN)
 
     def on_key_press(self, key, modifiers):
         self.keys_pressed.add(key)
@@ -727,5 +766,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
