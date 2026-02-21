@@ -398,6 +398,10 @@ class GameWindow(arcade.Window):
         self.rapid_fire_timer = 0.0
         self.shield_timer = 0.0
 
+        self.fps = 0
+        self.fps_timer = 0
+        self.frame_count = 0
+
         self.keys_pressed = set()
     
     def on_draw(self):
@@ -506,6 +510,13 @@ class GameWindow(arcade.Window):
                 arcade.color.BLUE,
                 14
             )
+        arcade.draw_text(
+            f"FPS: {self.fps}",
+            SCREEN_WIDTH - 100,
+            SCREEN_HEIGHT - 30,
+            arcade.color.WHITE,
+            14
+        )
 
 
     
@@ -561,14 +572,23 @@ class GameWindow(arcade.Window):
             powerup.update()
             if powerup.y < 0:
                 self.powerups.remove(powerup)
+        
+        self.frame_count += 1
+        self.fps_timer += delta_time
+
+        if self.fps_timer >= 1.0:
+            self.fps = self.frame_count
+            self.frame_count = 0
+            self.fps_timer = 0
 
         # Enemy collision with Bulllet
         for bullet in self.bullets[:]:
+            hit = False
             for enemy in self.enemies[:]:
                 dx = bullet.x - enemy.x
                 dy = bullet.y - enemy.y
                 if dx*dx + dy*dy < (bullet.radius + enemy.radius)**2:
-                    enemy.take_damage() # Fix this optimizatin in every collision check
+                    enemy.take_damage()
                     if enemy.health <= 0:
                         self.enemies.remove(enemy)
                         self.score += 20 if enemy.enemy_type == "shooter" else 10 
@@ -577,17 +597,23 @@ class GameWindow(arcade.Window):
                             self.powerups.append(
                                 PowerUp(enemy.x, enemy.y, power_type)
                             )
-                    if bullet in self.bullets:
-                        self.bullets.remove(bullet)
+                    
+                    hit = True
                     break
+
+            if hit and bullet in self.bullets:
+                self.bullets.remove(bullet)
+            break
+
+            # FIX: Fix the enemy collision with player bullets bug
 
         # Player bullets vs Enemy bullets
         for bullet in self.bullets[:]:
             for e_bullet in self.enemy_bullets[:]:
+                dx = bullet.x - e_bullet.x
+                dy = bullet.y - e_bullet.y
 
-                distance = math.sqrt((bullet.x - e_bullet.x) ** 2 +(bullet.y - e_bullet.y) ** 2)
-
-                if distance < bullet.radius + e_bullet.radius:
+                if dx*dx + dy*dy < (bullet.radius + e_bullet.radius)**2:
 
                     if bullet in self.bullets:
                         self.bullets.remove(bullet)
@@ -601,8 +627,9 @@ class GameWindow(arcade.Window):
         for bullet in self.enemy_bullets[:]:
             bullet.update()
 
-            distance = math.sqrt((bullet.x - self.player_x) ** 2 +(bullet.y - self.player_y) ** 2)
-            if distance < bullet.radius + self.player_radius:
+            dx = bullet.x - self.player_x
+            dy = bullet.y - self.player_y
+            if dx*dx + dy*dy < (bullet.radius + self.player_radius)**2:
                 if self.shield_timer <= 0:
                     self.health -= 5
                 self.enemy_bullets.remove(bullet)
@@ -626,8 +653,9 @@ class GameWindow(arcade.Window):
             if enemy_bullet:
                 self.enemy_bullets.append(enemy_bullet)
 
-            distance = math.sqrt((enemy.x - self.player_x)**2 + (enemy.y - self.player_y)**2)
-            if distance < enemy.radius + self.player_radius:
+            dx = enemy.x - self.player_x
+            dy = enemy.y - self.player_y
+            if dx*dx + dy*dy < (enemy.radius + self.player_radius)**2:
                 if self.shield_timer <= 0:
                     self.health -= 10
                 self.enemies.remove(enemy)
@@ -645,9 +673,10 @@ class GameWindow(arcade.Window):
         for bullet in self.boss_bullets[:]:
             bullet.update()
 
-            distance = math.sqrt((bullet.x - self.player_x) ** 2 + (bullet.y - self.player_y) ** 2)
+            dx = bullet.x - self.player_x
+            dy = bullet.y - self.player_y
 
-            if distance < bullet.radius + self.player_radius:
+            if dx*dx + dy*dy < (bullet.radius + self.player_radius)**2:
                 self.health -= bullet.damage
                 self.boss_bullets.remove(bullet)
 
@@ -662,9 +691,10 @@ class GameWindow(arcade.Window):
 
         if boss:
             for bullet in self.bullets[:]:
-                distance = math.sqrt((bullet.x - self.boss.x) ** 2 + (bullet.y - self.boss.y) ** 2)
+                dx = bullet.x - self.boss.x
+                dy = bullet.y - self.boss.y
 
-                if distance < bullet.radius + self.boss.radius:
+                if dx*dx + dy*dy < (bullet.radius + self.boss.radius)**2:
                     self.boss.take_damage()
                     self.bullets.remove(bullet)
 
@@ -696,7 +726,6 @@ class GameWindow(arcade.Window):
         if self.shield_timer > 0:
             self.shield_timer -= delta_time
 
-    # FIX: implement the powerup class properly
         
     def shoot(self):
         if self.shoot_cooldown > 0:
@@ -711,7 +740,7 @@ class GameWindow(arcade.Window):
         
         # self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN /3 if self.rapid_fire_timer > 0 else PLAYER_SHOOT_COOLDOWN
         if self.rapid_fire_timer > 0:
-            self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN / 3
+            self.shoot_cooldown = max(0.05, PLAYER_SHOOT_COOLDOWN / 3)
         else:
             self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN
         
