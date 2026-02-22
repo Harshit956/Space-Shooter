@@ -583,11 +583,11 @@ class GameWindow(arcade.Window):
 
         # Enemy collision with Bulllet
         for bullet in self.bullets[:]:
-            hit = False
             for enemy in self.enemies[:]:
                 dx = bullet.x - enemy.x
                 dy = bullet.y - enemy.y
-                if dx*dx + dy*dy < (bullet.radius + enemy.radius)**2:
+                dist = bullet.radius + enemy.radius
+                if dx*dx + dy*dy <= dist*dist:
                     enemy.take_damage()
                     if enemy.health <= 0:
                         self.enemies.remove(enemy)
@@ -598,14 +598,9 @@ class GameWindow(arcade.Window):
                                 PowerUp(enemy.x, enemy.y, power_type)
                             )
                     
-                    hit = True
+                    if bullet in self.bullets:
+                        self.bullets.remove(bullet)
                     break
-
-            if hit and bullet in self.bullets:
-                self.bullets.remove(bullet)
-            break
-
-            # FIX: Fix the enemy collision with player bullets bug
 
         # Player bullets vs Enemy bullets
         for bullet in self.bullets[:]:
@@ -717,7 +712,7 @@ class GameWindow(arcade.Window):
                     self.shield_timer = 15.0
 
                 elif powerup.power_type == "health":
-                    self.health = self.health + 50
+                    self.health = min(self.health + 50, 200)
 
                 self.powerups.remove(powerup)
         
@@ -736,9 +731,7 @@ class GameWindow(arcade.Window):
         bullet_y = self.player_y + \
             math.sin(math.radians(self.player_angle)) * self.player_radius
         self.bullets.append(Bullet(bullet_x, bullet_y, self.player_angle))
-        # self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN
-        
-        # self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN /3 if self.rapid_fire_timer > 0 else PLAYER_SHOOT_COOLDOWN
+
         if self.rapid_fire_timer > 0:
             self.shoot_cooldown = max(0.05, PLAYER_SHOOT_COOLDOWN / 3)
         else:
