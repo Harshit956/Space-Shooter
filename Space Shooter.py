@@ -372,6 +372,15 @@ class GameWindow(arcade.Window):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, fullscreen=True)
         arcade.set_background_color(arcade.color.BLACK)
 
+        self.player_texture = arcade.load_texture("assets/player.png")
+        self.enemy_texture = arcade.load_texture("assets/enemy.png")
+        self.boss_texture = arcade.load_texture("assets/boss.png")
+        self.bullet_texture = arcade.load_texture("assets/bullet.png")
+
+        self.rapid_texture = arcade.load_texture("assets/rapidfire.png")
+        self.shield_texture = arcade.load_texture("assets/shield.png")
+        self.health_texture = arcade.load_texture("assets/health.png")
+
         self.player_x = SCREEN_WIDTH//2
         self.player_y = SCREEN_HEIGHT//2
         self.player_angle = 0
@@ -408,14 +417,13 @@ class GameWindow(arcade.Window):
         self.clear()
 
         # Drawing Player
-        arcade.draw_triangle_filled(
-            self.player_x + math.cos(math.radians(self.player_angle)) * self.player_radius * 1.5,
-            self.player_y + math.sin(math.radians(self.player_angle)) * self.player_radius * 1.5,
-            self.player_x + math.cos(math.radians(self.player_angle + 150)) * self.player_radius,
-            self.player_y + math.sin(math.radians(self.player_angle + 150)) * self.player_radius,
-            self.player_x + math.cos(math.radians(self.player_angle - 150)) * self.player_radius,
-            self.player_y + math.sin(math.radians(self.player_angle - 150)) * self.player_radius,
-            arcade.color.WHITE
+        arcade.draw_texture_rectangle(
+            self.player_x,
+            self.player_y,
+            self.player_texture.width * PLAYER_SCALE,
+            self.player_texture.height * PLAYER_SCALE,
+            self.player_texture,
+            angle=self.player_angle
         )
 
         for bullet in self.bullets:
